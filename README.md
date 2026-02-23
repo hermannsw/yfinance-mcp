@@ -85,6 +85,24 @@ Add the following configuration to your MCP server configuration file:
 }
 ```
 
+### Via Docker Compose
+
+Add the following configuration to your MCP server configuration file:
+
+```docker-compose.yml
+services:
+  yfinance-mcp:
+    image: yfinance-mcp:latest
+    container_name: yfinance-mcp
+    stdin_open: true
+    tty: true
+    environment:
+      - TZ=Asia/Tokyo
+      - MCP_TRANSPORT=sse  # or streamable-http
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+```
+
 ### Local Development
 
 For local development, add the following configuration to your MCP server configuration file:
