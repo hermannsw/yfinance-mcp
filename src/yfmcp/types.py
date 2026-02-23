@@ -78,3 +78,26 @@ ChartType = Literal[
     "vwap",
     "volume_profile",
 ]
+
+FinancialType = Literal[
+    "income_stmt",
+    "quarterly_income_stmt",
+    "balance_sheet",
+    "quarterly_balance_sheet",
+    "cashflow",
+    "quarterly_cashflow",
+]
+
+HolderType = Literal[
+    "major_holders",
+    "institutional_holders",
+    "mutualfund_holders",
+    "insider_transactions",
+    "insider_purchases",
+    "insider_roster_holders",
+]
+
+RecommendationType = Literal[
+    "recommendations",
+    "upgrades_downgrades",
+]

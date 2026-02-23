@@ -12,8 +12,11 @@ from yfinance.const import SECTOR_INDUSTY_MAPPING
 
 from yfmcp.chart import generate_chart
 from yfmcp.types import ChartType
+from yfmcp.types import FinancialType
+from yfmcp.types import HolderType
 from yfmcp.types import Interval
 from yfmcp.types import Period
+from yfmcp.types import RecommendationType
 from yfmcp.types import SearchType
 from yfmcp.types import Sector
 from yfmcp.types import TopType
@@ -618,6 +621,353 @@ async def get_price_history(
         return df.to_markdown()
 
     return generate_chart(symbol=symbol, df=df, chart_type=chart_type)
+
+
+@mcp.tool(
+    name="yfinance_get_stock_actions",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_stock_actions(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+) -> str:
+    """Get historical dividends and stock splits for a specific stock.
+
+    Returns JSON array where each record has:
+    - Date: Event date (ISO 8601 format)
+    - Dividends: Dividend amount per share (0 if no dividend on that date)
+    - Stock Splits: Split ratio (0 if no split on that date)
+
+    Use this to analyze dividend history, income projections, and corporate actions.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        df = await asyncio.to_thread(lambda: ticker.actions)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching stock actions for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch stock actions for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    if df is None or df.empty:
+        return create_error_response(
+            f"No dividend or split history available for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    return dump_json(df.reset_index().to_dict(orient="records"))
+
+
+@mcp.tool(
+    name="yfinance_get_financial_statement",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_financial_statement(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    financial_type: Annotated[
+        FinancialType,
+        Field(
+            description=(
+                "Financial statement type: "
+                "'income_stmt' (annual income statement), "
+                "'quarterly_income_stmt' (quarterly income statement), "
+                "'balance_sheet' (annual balance sheet), "
+                "'quarterly_balance_sheet' (quarterly balance sheet), "
+                "'cashflow' (annual cash flow statement), "
+                "'quarterly_cashflow' (quarterly cash flow statement)"
+            )
+        ),
+    ],
+) -> str:
+    """Get financial statements including income statement, balance sheet, or cash flow statement.
+
+    Returns JSON object where keys are metric names and values are objects mapping
+    date strings to numeric values. Covers annual or quarterly periods depending on financial_type.
+
+    Use this to analyze revenue, profitability, assets, liabilities, and cash flows.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        df = await asyncio.to_thread(lambda: getattr(ticker, financial_type))
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching financial statement for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "financial_type": financial_type, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch '{financial_type}' for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "financial_type": financial_type, "exception": str(exc)},
+        )
+
+    if df is None or df.empty:
+        return create_error_response(
+            f"No '{financial_type}' data available for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol, "financial_type": financial_type},
+        )
+
+    return dump_json(df.rename(columns=str).to_dict())
+
+
+@mcp.tool(
+    name="yfinance_get_holder_info",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_holder_info(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    holder_type: Annotated[
+        HolderType,
+        Field(
+            description=(
+                "Holder information type: "
+                "'major_holders' (top shareholders by percentage), "
+                "'institutional_holders' (institutional ownership details), "
+                "'mutualfund_holders' (mutual fund ownership details), "
+                "'insider_transactions' (recent insider buy/sell transactions), "
+                "'insider_purchases' (insider purchase summary), "
+                "'insider_roster_holders' (list of insiders and their holdings)"
+            )
+        ),
+    ],
+) -> str:
+    """Get shareholder and insider information for a specific stock.
+
+    Returns JSON array with holder details. Content varies by holder_type:
+    - major_holders: Percentage breakdowns (insiders, institutions, float)
+    - institutional_holders / mutualfund_holders: Holder name, shares, % out, value, date reported
+    - insider_transactions: Insider name, shares, value, transaction type, date
+    - insider_purchases: Summary of insider purchase/sale activity
+    - insider_roster_holders: Insider names, positions, and share counts
+
+    Use this to track institutional sentiment, insider confidence, and ownership concentration.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        df = await asyncio.to_thread(lambda: getattr(ticker, holder_type))
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching holder info for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "holder_type": holder_type, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch '{holder_type}' for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "holder_type": holder_type, "exception": str(exc)},
+        )
+
+    if df is None or df.empty:
+        return create_error_response(
+            f"No '{holder_type}' data available for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol, "holder_type": holder_type},
+        )
+
+    return dump_json(df.reset_index(drop=True).to_dict(orient="records"))
+
+
+@mcp.tool(
+    name="yfinance_get_option_expiration_dates",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_option_expiration_dates(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+) -> str:
+    """Get available options expiration dates for a specific stock.
+
+    Returns JSON array of date strings in 'YYYY-MM-DD' format representing
+    all available options expiration dates.
+
+    Use this before calling 'yfinance_get_option_chain' to find valid expiration dates.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        dates = await asyncio.to_thread(lambda: ticker.options)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching option dates for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch option expiration dates for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    if not dates:
+        return create_error_response(
+            f"No options data available for '{symbol}'. Options may not be traded for this security.",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    return dump_json(list(dates))
+
+
+@mcp.tool(
+    name="yfinance_get_option_chain",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_option_chain(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    expiration_date: Annotated[
+        str,
+        Field(description="Options expiration date in 'YYYY-MM-DD' format. Use 'yfinance_get_option_expiration_dates' to list available dates."),
+    ],
+    option_type: Annotated[
+        str,
+        Field(description="Option type: 'calls' or 'puts'"),
+    ],
+) -> str:
+    """Get the options chain for a specific expiration date and option type.
+
+    Returns JSON array where each record represents one contract with fields:
+    - contractSymbol: Unique option contract identifier
+    - strike: Strike price
+    - lastPrice: Most recent trade price
+    - bid / ask: Current bid and ask prices
+    - volume: Number of contracts traded today
+    - openInterest: Total open contracts
+    - impliedVolatility: Implied volatility (annualized)
+    - inTheMoney: Whether the option is currently in the money
+    - expiration: Expiration date
+
+    Use 'yfinance_get_option_expiration_dates' first to find valid expiration dates.
+    """
+    if option_type not in ("calls", "puts"):
+        return create_error_response(
+            f"Invalid option_type '{option_type}'. Valid options: 'calls', 'puts'.",
+            error_code="INVALID_PARAMS",
+            details={"option_type": option_type, "valid_options": ["calls", "puts"]},
+        )
+
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        chain = await asyncio.to_thread(ticker.option_chain, expiration_date)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching option chain for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "expiration_date": expiration_date, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch option chain for '{symbol}' expiring '{expiration_date}'. "
+            "Verify the symbol and expiration date are correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "expiration_date": expiration_date, "exception": str(exc)},
+        )
+
+    df = getattr(chain, option_type)
+    if df is None or df.empty:
+        return create_error_response(
+            f"No {option_type} data available for '{symbol}' expiring '{expiration_date}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol, "expiration_date": expiration_date, "option_type": option_type},
+        )
+
+    return dump_json(df.reset_index(drop=True).to_dict(orient="records"))
+
+
+@mcp.tool(
+    name="yfinance_get_recommendations",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_recommendations(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    recommendation_type: Annotated[
+        RecommendationType,
+        Field(
+            description=(
+                "Recommendation type: "
+                "'recommendations' (analyst buy/hold/sell ratings summary), "
+                "'upgrades_downgrades' (historical rating changes by firm)"
+            )
+        ),
+    ],
+) -> str:
+    """Get analyst recommendations or rating change history for a specific stock.
+
+    For 'recommendations': Returns JSON array with period-based consensus counts:
+    - period: Time period label
+    - strongBuy, buy, hold, sell, strongSell: Number of analysts with each rating
+
+    For 'upgrades_downgrades': Returns JSON array of rating changes:
+    - Firm: Analyst firm name
+    - ToGrade: New rating (e.g., 'Buy', 'Outperform', 'Neutral')
+    - FromGrade: Previous rating
+    - Action: Change type (e.g., 'up', 'down', 'init', 'main')
+    - GradeDate: Date of the rating change
+
+    Use this to gauge analyst sentiment and track rating momentum.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        df = await asyncio.to_thread(lambda: getattr(ticker, recommendation_type))
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching recommendations for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "recommendation_type": recommendation_type, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch '{recommendation_type}' for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "recommendation_type": recommendation_type, "exception": str(exc)},
+        )
+
+    if df is None or df.empty:
+        return create_error_response(
+            f"No '{recommendation_type}' data available for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol, "recommendation_type": recommendation_type},
+        )
+
+    return dump_json(df.reset_index().to_dict(orient="records"))
 
 
 def main() -> None:

@@ -50,6 +50,61 @@ A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaro
     - If `chart_type` is not specified: Returns historical price data as a markdown table
     - If `chart_type` is specified: Returns a base64-encoded WebP image for efficient token usage
 
+- **yfinance_get_stock_actions**
+
+  - Fetch historical dividends and stock splits for a given stock symbol.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+
+- **yfinance_get_financial_statement**
+
+  - Fetch financial statements (income statement, balance sheet, or cash flow statement) for annual or quarterly periods.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+    - `financial_type` (string): Type of financial statement to retrieve. Options:
+      - "income_stmt": Annual income statement
+      - "quarterly_income_stmt": Quarterly income statement
+      - "balance_sheet": Annual balance sheet
+      - "quarterly_balance_sheet": Quarterly balance sheet
+      - "cashflow": Annual cash flow statement
+      - "quarterly_cashflow": Quarterly cash flow statement
+
+- **yfinance_get_holder_info**
+
+  - Fetch shareholder and insider information for a given stock symbol.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+    - `holder_type` (string): Type of holder information to retrieve. Options:
+      - "major_holders": Top shareholders by percentage
+      - "institutional_holders": Institutional ownership details
+      - "mutualfund_holders": Mutual fund ownership details
+      - "insider_transactions": Recent insider buy/sell transactions
+      - "insider_purchases": Summary of insider purchase/sale activity
+      - "insider_roster_holders": List of insiders and their holdings
+
+- **yfinance_get_option_expiration_dates**
+
+  - Fetch available options expiration dates for a given stock symbol. Use this before calling `yfinance_get_option_chain` to find valid expiration dates.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+
+- **yfinance_get_option_chain**
+
+  - Fetch the options chain (calls or puts) for a specific expiration date. Returns contract details including strike price, premium, implied volatility, and open interest.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+    - `expiration_date` (string): Options expiration date in 'YYYY-MM-DD' format.
+    - `option_type` (string): Option type to retrieve (options: "calls", "puts").
+
+- **yfinance_get_recommendations**
+
+  - Fetch analyst recommendations or rating change history for a given stock symbol.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+    - `recommendation_type` (string): Type of recommendation data to retrieve. Options:
+      - "recommendations": Analyst buy/hold/sell ratings summary by period
+      - "upgrades_downgrades": Historical rating changes by analyst firm
+
 ## Usage
 
 You can use this MCP server via uv (Python package installer), Docker, or local development.
@@ -97,7 +152,6 @@ services:
     stdin_open: true
     tty: true
     environment:
-      - TZ=Asia/Tokyo
       - MCP_TRANSPORT=sse  # or streamable-http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000

@@ -51,6 +51,127 @@ async def test_get_ticker_info(server_params: StdioServerParameters) -> None:
 # Fast unit tests for error handling (no network calls)
 
 
+@pytest.mark.asyncio
+async def test_get_stock_actions(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        result = await session.call_tool("yfinance_get_stock_actions", arguments={"symbol": "AAPL"})
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+
+        data = json.loads(result.content[0].text)
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_financial_statement(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        result = await session.call_tool(
+            "yfinance_get_financial_statement",
+            arguments={"symbol": "AAPL", "financial_type": "income_stmt"},
+        )
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+
+        data = json.loads(result.content[0].text)
+        assert isinstance(data, dict)
+        assert len(data) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_holder_info(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        result = await session.call_tool(
+            "yfinance_get_holder_info",
+            arguments={"symbol": "AAPL", "holder_type": "institutional_holders"},
+        )
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+
+        data = json.loads(result.content[0].text)
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_option_expiration_dates(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        result = await session.call_tool("yfinance_get_option_expiration_dates", arguments={"symbol": "AAPL"})
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+
+        data = json.loads(result.content[0].text)
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_option_chain(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        # First get a valid expiration date
+        dates_result = await session.call_tool("yfinance_get_option_expiration_dates", arguments={"symbol": "AAPL"})
+        dates = json.loads(dates_result.content[0].text)
+        expiration_date = dates[0]
+
+        result = await session.call_tool(
+            "yfinance_get_option_chain",
+            arguments={"symbol": "AAPL", "expiration_date": expiration_date, "option_type": "calls"},
+        )
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+
+        data = json.loads(result.content[0].text)
+        assert isinstance(data, list)
+        assert len(data) > 0
+        assert "strike" in data[0]
+        assert "impliedVolatility" in data[0]
+
+
+@pytest.mark.asyncio
+async def test_get_recommendations(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        result = await session.call_tool(
+            "yfinance_get_recommendations",
+            arguments={"symbol": "AAPL", "recommendation_type": "recommendations"},
+        )
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+
+        data = json.loads(result.content[0].text)
+        assert isinstance(data, list)
+        assert len(data) > 0
+
+
 def test_error_function_structure() -> None:
     """Test that create_error_response() function creates proper error structure."""
     # Test with minimal parameters
