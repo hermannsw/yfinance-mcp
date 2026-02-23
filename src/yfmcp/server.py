@@ -21,7 +21,14 @@ from yfmcp.utils import create_error_response
 from yfmcp.utils import dump_json
 
 # https://github.com/jlowin/fastmcp/issues/81#issuecomment-2714245145
-mcp = FastMCP("yfinance_mcp", log_level="ERROR")
+import os as _os
+
+mcp = FastMCP(
+    "yfinance_mcp",
+    log_level="ERROR",
+    host=_os.getenv("MCP_HOST", "127.0.0.1"),
+    port=int(_os.getenv("MCP_PORT", "8000")),
+)
 
 
 @mcp.tool(
@@ -614,4 +621,8 @@ async def get_price_history(
 
 
 def main() -> None:
-    mcp.run()
+    transport = _os.getenv("MCP_TRANSPORT", "stdio")
+    if transport in ("sse", "streamable-http"):
+        mcp.run(transport=transport)  # type: ignore[arg-type]
+    else:
+        mcp.run()
